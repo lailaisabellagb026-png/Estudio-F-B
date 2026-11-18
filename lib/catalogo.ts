@@ -1,11 +1,12 @@
-export const CATEGORIAS = [
+/** Categorias iniciais do catálogo; o estúdio pode criar, renomear e apagar em /admin/servicos. */
+export const CATEGORIAS_PADRAO = [
   "Cortes",
   "Coloração e química",
   "Tratamentos",
   "Escova e finalização",
-] as const;
+];
 
-export type Categoria = (typeof CATEGORIAS)[number];
+export type Categoria = string;
 
 export interface Servico {
   id: string;
@@ -38,6 +39,8 @@ export const SERVICOS_PADRAO: Servico[] = [
 
 export const LIMITES_SERVICO = {
   nome: 60,
+  categoria: 40,
+  categoriasMax: 30,
   precoMax: 20000,
   duracaoMin: 5,
   duracaoMax: 600,
@@ -63,8 +66,8 @@ export function novoIdServico(nome: string, existentes: Iterable<string>) {
   return id;
 }
 
-function categoriaValida(valor: unknown): valor is Categoria {
-  return CATEGORIAS.includes(valor as Categoria);
+function lerCategoria(valor: unknown): Categoria {
+  return typeof valor === "string" ? valor.trim().slice(0, LIMITES_SERVICO.categoria) : "";
 }
 
 /** Lê um serviço vindo do banco ou do painel; devolve null se estiver inválido. */
@@ -85,7 +88,7 @@ function lerServico(bruto: unknown, idsUsados: Set<string>): Servico | null {
   return {
     id,
     nome,
-    categoria: categoriaValida(item.categoria) ? item.categoria : "Cortes",
+    categoria: lerCategoria(item.categoria) || CATEGORIAS_PADRAO[0],
     preco: Math.round(preco * 100) / 100,
     aPartirDe: item.aPartirDe === true,
     duracaoMin,
@@ -130,9 +133,66 @@ export function problemaNoCatalogo(servicos: Servico[]): string | null {
   return null;
 }
 
+/**
+ * Lista de categorias salva no painel. Categorias usadas por algum serviço
+ * e que faltem na lista entram no fim, para nenhum serviço sumir.
+ */
+export function normalizarCategorias(valor: unknown, servicos: Servico[]): Categoria[] {
+  const lista: unknown[] = Array.isArray(valor) ? valor : CATEGORIAS_PADRAO;
+  const vistas = new Set<string>();
+  const categorias: Categoria[] = [];
+  for (const item of [...lista, ...servicos.map((servico) => servico.categoria)]) {
+    const nome = lerCategoria(item);
+    const chave = nome.toLocaleLowerCase("pt-BR");
+    if (!nome || vistas.has(chave)) continue;
+    vistas.add(chave);
+    categorias.push(nome);
+  }
+  return categorias.length > 0 ? categorias : [...CATEGORIAS_PADRAO];
+}
+
+/** Lê as categorias enviadas pelo painel; null se alguma estiver inválida. */
+export function lerCategoriasEnviadas(valor: unknown): Categoria[] | null {
+  if (!Array.isArray(valor) || valor.length === 0 || valor.length > LIMITES_SERVICO.categoriasMax) return null;
+  const categorias = valor.map(lerCategoria);
+  return categorias.every(Boolean) ? categorias : null;
+}
+
+/** Problema que impede salvar as categorias, ou null se estiver tudo certo. */
+export function problemaNasCategorias(categorias: Categoria[], servicos: Servico[]): string | null {
+  if (categorias.length === 0) return "Mantenha pelo menos uma categoria.";
+  const nomes = new Set<string>();
+  for (const categoria of categorias) {
+    const nome = categoria.trim();
+    if (!nome) return "Toda categoria precisa de um nome.";
+    const chave = nome.toLocaleLowerCase("pt-BR");
+    if (nomes.has(chave)) return `A categoria "${nome}" aparece duas vezes. Use nomes diferentes.`;
+    nomes.add(chave);
+  }
+  const semCategoria = servicos.find((servico) => !categorias.includes(servico.categoria));
+  if (semCategoria) return `Escolha uma categoria para "${semCategoria.nome}".`;
+  return null;
+}
+
+/** Deixa os serviços na ordem das categorias, mantendo a ordem dentro de cada uma. */
+export function ordenarPorCategoria(servicos: Servico[], categorias: Categoria[]) {
+  const posicao = (servico: Servico) => {
+    const indice = categorias.indexOf(servico.categoria);
+    return indice < 0 ? categorias.length : indice;
+  };
+  return servicos
+    .map((servico, i) => ({ servico, i }))
+    .sort((a, b) => posicao(a.servico) - posicao(b.servico) || a.i - b.i)
+    .map(({ servico }) => servico);
+}
+
+/** Agrupa na ordem em que as categorias aparecem (o catálogo é salvo já ordenado). */
 export function agruparPorCategoria(servicos: Servico[]) {
-  return CATEGORIAS.map((categoria) => ({
-    categoria,
-    servicos: servicos.filter((servico) => servico.categoria === categoria),
-  })).filter((grupo) => grupo.servicos.length > 0);
+  const grupos = new Map<Categoria, Servico[]>();
+  for (const servico of servicos) {
+    const lista = grupos.get(servico.categoria) ?? [];
+    lista.push(servico);
+    grupos.set(servico.categoria, lista);
+  }
+  return [...grupos].map(([categoria, lista]) => ({ categoria, servicos: lista }));
 }

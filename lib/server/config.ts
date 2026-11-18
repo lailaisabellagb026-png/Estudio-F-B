@@ -1,6 +1,14 @@
 import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
-import { normalizarCatalogo, SERVICOS_PADRAO, type Servico } from "@/lib/catalogo";
+import {
+  CATEGORIAS_PADRAO,
+  normalizarCatalogo,
+  normalizarCategorias,
+  ordenarPorCategoria,
+  SERVICOS_PADRAO,
+  type Categoria,
+  type Servico,
+} from "@/lib/catalogo";
 import {
   HORARIOS_PADRAO,
   normalizarConfiguracaoHorarios,
@@ -10,10 +18,11 @@ import { banco } from "./firebaseAdmin";
 
 export interface ConfiguracaoEstudio {
   servicos: Servico[];
+  categorias: Categoria[];
   horarios: ConfiguracaoHorarios;
 }
 
-const PADRAO: ConfiguracaoEstudio = { servicos: SERVICOS_PADRAO, horarios: HORARIOS_PADRAO };
+const PADRAO: ConfiguracaoEstudio = { servicos: SERVICOS_PADRAO, categorias: CATEGORIAS_PADRAO, horarios: HORARIOS_PADRAO };
 
 function documento() {
   return banco().collection("configuracoes").doc("estudio");
@@ -24,8 +33,11 @@ export async function carregarConfiguracao(): Promise<ConfiguracaoEstudio> {
   const snap = await documento().get();
   if (!snap.exists) return PADRAO;
   const dados = snap.data() ?? {};
+  const servicos = normalizarCatalogo(dados.servicos);
+  const categorias = normalizarCategorias(dados.categorias, servicos);
   return {
-    servicos: normalizarCatalogo(dados.servicos),
+    servicos: ordenarPorCategoria(servicos, categorias),
+    categorias,
     horarios: normalizarConfiguracaoHorarios(dados.horarios),
   };
 }
@@ -43,8 +55,8 @@ export async function carregarConfiguracaoParaPagina(): Promise<ConfiguracaoEstu
   }
 }
 
-export async function salvarServicos(servicos: Servico[]) {
-  await documento().set({ servicos, servicosAtualizadosEm: FieldValue.serverTimestamp() }, { merge: true });
+export async function salvarServicos(servicos: Servico[], categorias: Categoria[]) {
+  await documento().set({ servicos, categorias, servicosAtualizadosEm: FieldValue.serverTimestamp() }, { merge: true });
 }
 
 export async function salvarHorarios(horarios: ConfiguracaoHorarios) {

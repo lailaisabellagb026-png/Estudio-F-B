@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { IconeFechar, IconeMais } from "@/components/Icones";
 import { chamarApi } from "@/components/painel/api";
-import { CATEGORIAS, novoIdServico, problemaNoCatalogo, type Categoria, type Servico } from "@/lib/catalogo";
+import { novoIdServico, problemaNasCategorias, problemaNoCatalogo, type Categoria, type Servico } from "@/lib/catalogo";
 import { formatarDuracao, lerPreco } from "@/lib/formatos";
 import {
   NOMES_DIAS,
@@ -20,22 +20,37 @@ import { agoraNoEstudio } from "@/lib/tempo";
 const ORDEM_DA_SEMANA: DiaSemana[] = [1, 2, 3, 4, 5, 6, 0];
 const DURACOES = [15, 20, 30, 40, 45, 50, 60, 75, 90, 105, 120, 150, 180, 210, 240, 270, 300, 360, 420, 480];
 
-type LinhaServico = Servico & { precoTexto: string };
+type LinhaServico = Omit<Servico, "categoria"> & { categoriaId: string; precoTexto: string };
+type LinhaCategoria = { id: string; nome: string };
 type Mensagem = { tipo: "ok" | "erro"; texto: string } | null;
 
 function novoId(prefixo: string) {
   return `${prefixo}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function paraLinha(servico: Servico): LinhaServico {
-  return { ...servico, precoTexto: String(servico.preco).replace(".", ",") };
+function paraLinhas(servicos: Servico[], nomesCategorias: Categoria[]) {
+  // Ids fixos pela posição: o servidor e o navegador precisam gerar os mesmos.
+  const categorias: LinhaCategoria[] = nomesCategorias.map((nome, indice) => ({ id: `categoria-salva-${indice}`, nome }));
+  const idDe = new Map(categorias.map((categoria) => [categoria.nome, categoria.id]));
+  const linhas: LinhaServico[] = servicos.map(({ categoria, ...servico }) => {
+    let categoriaId = idDe.get(categoria);
+    if (!categoriaId) {
+      categoriaId = `categoria-salva-${categorias.length}`;
+      categorias.push({ id: categoriaId, nome: categoria });
+      idDe.set(categoria, categoriaId);
+    }
+    return { ...servico, categoriaId, precoTexto: String(servico.preco).replace(".", ",") };
+  });
+  return { categorias, linhas };
 }
 
 export function EditorEstudio({
   servicosIniciais,
+  categoriasIniciais,
   horariosIniciais,
 }: {
   servicosIniciais: Servico[];
+  categoriasIniciais: Categoria[];
   horariosIniciais: ConfiguracaoHorarios;
 }) {
   const router = useRouter();
@@ -98,23 +113,33 @@ export function EditorEstudio({
     }
   }
 
-  // ── Serviços ──
-  const [servicos, setServicos] = useState<LinhaServico[]>(() => servicosIniciais.map(paraLinha));
+  // ── Catálogo: categorias e serviços ──
+  const [catalogo, setCatalogo] = useState(() => paraLinhas(servicosIniciais, categoriasIniciais));
+  const { categorias, linhas: servicos } = catalogo;
   const [salvandoServicos, setSalvandoServicos] = useState(false);
   const [mensagemServicos, setMensagemServicos] = useState<Mensagem>(null);
 
-  function mudarServico(id: string, mudanca: Partial<LinhaServico>) {
-    setServicos((atuais) => atuais.map((item) => (item.id === id ? { ...item, ...mudanca } : item)));
+  function setServicos(mudar: (atuais: LinhaServico[]) => LinhaServico[]) {
+    setCatalogo((atual) => ({ ...atual, linhas: mudar(atual.linhas) }));
     setMensagemServicos(null);
   }
 
-  function adicionarServico() {
+  function setCategorias(mudar: (atuais: LinhaCategoria[]) => LinhaCategoria[]) {
+    setCatalogo((atual) => ({ ...atual, categorias: mudar(atual.categorias) }));
+    setMensagemServicos(null);
+  }
+
+  function mudarServico(id: string, mudanca: Partial<LinhaServico>) {
+    setServicos((atuais) => atuais.map((item) => (item.id === id ? { ...item, ...mudanca } : item)));
+  }
+
+  function adicionarServico(categoriaId: string) {
     setServicos((atuais) => [
       ...atuais,
       {
         id: novoIdServico("novo servico", atuais.map((item) => item.id)),
         nome: "",
-        categoria: "Cortes",
+        categoriaId,
         preco: 0,
         precoTexto: "",
         aPartirDe: false,
@@ -122,20 +147,41 @@ export function EditorEstudio({
         ativo: true,
       },
     ]);
-    setMensagemServicos(null);
+  }
+
+  function adicionarCategoria() {
+    setCategorias((atuais) => [...atuais, { id: novoId("categoria"), nome: "" }]);
+  }
+
+  function apagarCategoria(categoria: LinhaCategoria) {
+    if (categorias.length <= 1) {
+      setMensagemServicos({ tipo: "erro", texto: "Mantenha pelo menos uma categoria no catálogo." });
+      return;
+    }
+    const quantos = servicos.filter((item) => item.categoriaId === categoria.id).length;
+    const nome = categoria.nome.trim() || "sem nome";
+    const quais = quantos === 1 ? "o serviço" : `os ${quantos} serviços`;
+    if (quantos > 0 && !window.confirm(`Apagar a categoria "${nome}" e ${quais} dentro dela?`)) return;
+    setCatalogo((atual) => ({
+      categorias: atual.categorias.filter((item) => item.id !== categoria.id),
+      linhas: atual.linhas.filter((item) => item.categoriaId !== categoria.id),
+    }));
+    setMensagemServicos({ tipo: "ok", texto: "Categoria removida. Clique em \u201cSalvar catálogo\u201d para confirmar." });
   }
 
   async function salvarServicos() {
+    const nomeDa = new Map(categorias.map((categoria) => [categoria.id, categoria.nome.trim()]));
+    const listaCategorias = categorias.map((categoria) => categoria.nome.trim());
     const lista: Servico[] = [];
-    for (const { precoTexto, ...servico } of servicos) {
+    for (const { precoTexto, categoriaId, ...servico } of servicos) {
       const preco = lerPreco(precoTexto);
       if (!Number.isFinite(preco)) {
         setMensagemServicos({ tipo: "erro", texto: `Confira o preço de "${servico.nome || "serviço sem nome"}". Use, por exemplo, 80 ou 80,00.` });
         return;
       }
-      lista.push({ ...servico, nome: servico.nome.trim(), preco });
+      lista.push({ ...servico, categoria: nomeDa.get(categoriaId) ?? "", nome: servico.nome.trim(), preco });
     }
-    const problema = problemaNoCatalogo(lista);
+    const problema = problemaNasCategorias(listaCategorias, lista) ?? problemaNoCatalogo(lista);
     if (problema) {
       setMensagemServicos({ tipo: "erro", texto: problema });
       return;
@@ -143,9 +189,12 @@ export function EditorEstudio({
     setSalvandoServicos(true);
     setMensagemServicos(null);
     try {
-      const resposta = await chamarApi<{ servicos: Servico[] }>("/api/admin/configuracoes", { metodo: "PUT", corpo: { servicos: lista } });
-      setServicos(resposta.servicos.map(paraLinha));
-      setMensagemServicos({ tipo: "ok", texto: "Serviços salvos. A tabela de preços e o agendamento já foram atualizados." });
+      const resposta = await chamarApi<{ servicos: Servico[]; categorias: Categoria[] }>("/api/admin/configuracoes", {
+        metodo: "PUT",
+        corpo: { servicos: lista, categorias: listaCategorias },
+      });
+      setCatalogo(paraLinhas(resposta.servicos, resposta.categorias));
+      setMensagemServicos({ tipo: "ok", texto: "Catálogo salvo. A tabela de preços e o agendamento já foram atualizados." });
       router.refresh();
     } catch (falha) {
       setMensagemServicos({ tipo: "erro", texto: (falha as Error).message });
@@ -271,88 +320,123 @@ export function EditorEstudio({
         <Rodape mensagem={mensagemHorarios} salvando={salvandoHorarios} rotulo="Salvar expediente" onSalvar={salvarHorarios} />
       </Bloco>
 
-      {/* ── Serviços ── */}
-      <Bloco titulo="Serviços" texto="Ocultar tira o serviço do site sem apagar o histórico. “A partir de” avisa que o preço pode variar.">
-        <div className="space-y-3">
-          {servicos.map((servico) => (
-            <div key={servico.id} className={`rounded-xl border p-3 ${servico.ativo ? "border-linha" : "border-dashed border-linha opacity-70"}`}>
-              <div className="flex items-center gap-2">
-                <input
-                  value={servico.nome}
-                  maxLength={60}
-                  placeholder="Nome do serviço"
-                  onChange={(e) => mudarServico(servico.id, { nome: e.target.value })}
-                  className="campo flex-1 px-3 py-2 font-medium"
-                  aria-label="Nome do serviço"
-                />
+      {/* ── Catálogo ── */}
+      <Bloco
+        titulo="Catálogo de serviços"
+        texto="Crie, renomeie ou apague categorias e serviços. Ocultar tira o serviço do site sem apagar o histórico. “A partir de” avisa que o preço pode variar."
+      >
+        <div className="space-y-5">
+          {categorias.map((categoria) => {
+            const daCategoria = servicos.filter((item) => item.categoriaId === categoria.id);
+            return (
+              <section key={categoria.id} className="rounded-2xl border border-linha bg-carvao p-3 sm:p-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={categoria.nome}
+                    maxLength={40}
+                    placeholder="Nome da categoria (ex.: Unhas)"
+                    onChange={(e) => {
+                      const nome = e.target.value;
+                      setCategorias((atuais) => atuais.map((item) => (item.id === categoria.id ? { ...item, nome } : item)));
+                    }}
+                    className="campo flex-1 px-3 py-2 text-lg font-bold"
+                    aria-label="Nome da categoria"
+                  />
+                  <Remover rotulo={`Apagar categoria ${categoria.nome}`.trim()} onClick={() => apagarCategoria(categoria)} />
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  {daCategoria.length === 0 && <p className="px-1 text-sm text-cinza">Nenhum serviço nesta categoria ainda.</p>}
+                  {daCategoria.map((servico) => (
+                    <div key={servico.id} className={`rounded-xl border p-3 ${servico.ativo ? "border-linha" : "border-dashed border-linha opacity-70"}`}>
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={servico.nome}
+                          maxLength={60}
+                          placeholder="Nome do serviço"
+                          onChange={(e) => mudarServico(servico.id, { nome: e.target.value })}
+                          className="campo flex-1 px-3 py-2 font-semibold"
+                          aria-label="Nome do serviço"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => mudarServico(servico.id, { ativo: !servico.ativo })}
+                          className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${servico.ativo ? "border-giz/40 text-giz" : "border-linha text-cinza"}`}
+                        >
+                          {servico.ativo ? "Visível" : "Oculto"}
+                        </button>
+                        <Remover
+                          rotulo={`Apagar ${servico.nome || "serviço"}`}
+                          onClick={() => setServicos((atuais) => atuais.filter((item) => item.id !== servico.id))}
+                        />
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[1.3fr_1fr_1fr_auto] sm:items-end">
+                        <Campo rotulo="Categoria">
+                          <select
+                            value={servico.categoriaId}
+                            onChange={(e) => mudarServico(servico.id, { categoriaId: e.target.value })}
+                            className="campo px-3 py-2"
+                          >
+                            {categorias.map((opcao) => (
+                              <option key={opcao.id} value={opcao.id}>
+                                {opcao.nome.trim() || "(sem nome)"}
+                              </option>
+                            ))}
+                          </select>
+                        </Campo>
+                        <Campo rotulo="Preço (R$)">
+                          <input
+                            inputMode="decimal"
+                            value={servico.precoTexto}
+                            placeholder="0,00"
+                            onChange={(e) => mudarServico(servico.id, { precoTexto: e.target.value })}
+                            className="campo px-3 py-2 tabular-nums"
+                          />
+                        </Campo>
+                        <Campo rotulo="Duração">
+                          <select
+                            value={servico.duracaoMin}
+                            onChange={(e) => mudarServico(servico.id, { duracaoMin: Number(e.target.value) })}
+                            className="campo px-3 py-2"
+                          >
+                            {[...new Set([...DURACOES, servico.duracaoMin])].sort((a, b) => a - b).map((minutos) => (
+                              <option key={minutos} value={minutos}>
+                                {formatarDuracao(minutos)}
+                              </option>
+                            ))}
+                          </select>
+                        </Campo>
+                        <label className="flex items-center gap-2 py-2 text-sm text-cinza">
+                          <input
+                            type="checkbox"
+                            checked={servico.aPartirDe}
+                            onChange={(e) => mudarServico(servico.id, { aPartirDe: e.target.checked })}
+                            className="h-4 w-4 accent-[#c8102e]"
+                          />
+                          a partir de
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => mudarServico(servico.id, { ativo: !servico.ativo })}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${servico.ativo ? "border-giz/40 text-giz" : "border-linha text-cinza"}`}
+                  onClick={() => adicionarServico(categoria.id)}
+                  className="mt-3 flex items-center gap-1.5 px-1 text-sm font-semibold text-vermelho-vivo hover:underline"
                 >
-                  {servico.ativo ? "Visível" : "Oculto"}
+                  <IconeMais className="h-3.5 w-3.5" /> Adicionar serviço{categoria.nome.trim() ? ` em ${categoria.nome.trim()}` : ""}
                 </button>
-                <Remover
-                  rotulo={`Remover ${servico.nome || "serviço"}`}
-                  onClick={() => {
-                    setServicos((atuais) => atuais.filter((item) => item.id !== servico.id));
-                    setMensagemServicos(null);
-                  }}
-                />
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[1.3fr_1fr_1fr_auto] sm:items-end">
-                <Campo rotulo="Categoria">
-                  <select
-                    value={servico.categoria}
-                    onChange={(e) => mudarServico(servico.id, { categoria: e.target.value as Categoria })}
-                    className="campo px-3 py-2"
-                  >
-                    {CATEGORIAS.map((categoria) => (
-                      <option key={categoria}>{categoria}</option>
-                    ))}
-                  </select>
-                </Campo>
-                <Campo rotulo="Preço (R$)">
-                  <input
-                    inputMode="decimal"
-                    value={servico.precoTexto}
-                    placeholder="0,00"
-                    onChange={(e) => mudarServico(servico.id, { precoTexto: e.target.value })}
-                    className="campo px-3 py-2 tabular-nums"
-                  />
-                </Campo>
-                <Campo rotulo="Duração">
-                  <select
-                    value={servico.duracaoMin}
-                    onChange={(e) => mudarServico(servico.id, { duracaoMin: Number(e.target.value) })}
-                    className="campo px-3 py-2"
-                  >
-                    {[...new Set([...DURACOES, servico.duracaoMin])].sort((a, b) => a - b).map((minutos) => (
-                      <option key={minutos} value={minutos}>
-                        {formatarDuracao(minutos)}
-                      </option>
-                    ))}
-                  </select>
-                </Campo>
-                <label className="flex items-center gap-2 py-2 text-sm text-cinza">
-                  <input
-                    type="checkbox"
-                    checked={servico.aPartirDe}
-                    onChange={(e) => mudarServico(servico.id, { aPartirDe: e.target.checked })}
-                    className="h-4 w-4 accent-[#c8102e]"
-                  />
-                  a partir de
-                </label>
-              </div>
-            </div>
-          ))}
+              </section>
+            );
+          })}
         </div>
 
-        <button type="button" onClick={adicionarServico} className="botao-contorno mt-4 w-full border-dashed">
-          <IconeMais /> Adicionar serviço
+        <button type="button" onClick={adicionarCategoria} className="botao-contorno mt-5 w-full border-dashed">
+          <IconeMais /> Adicionar categoria
         </button>
 
-        <Rodape mensagem={mensagemServicos} salvando={salvandoServicos} rotulo="Salvar serviços" onSalvar={salvarServicos} />
+        <Rodape mensagem={mensagemServicos} salvando={salvandoServicos} rotulo="Salvar catálogo" onSalvar={salvarServicos} />
       </Bloco>
     </main>
   );

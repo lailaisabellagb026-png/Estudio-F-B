@@ -1,21 +1,30 @@
 import { NextResponse } from "next/server";
-import { lerCatalogoEnviado, problemaNoCatalogo } from "@/lib/catalogo";
+import {
+  lerCatalogoEnviado,
+  lerCategoriasEnviadas,
+  ordenarPorCategoria,
+  problemaNasCategorias,
+  problemaNoCatalogo,
+} from "@/lib/catalogo";
 import { normalizarConfiguracaoHorarios, problemaNoExpediente, type ConfiguracaoHorarios } from "@/lib/horariosAtendimento";
 import { salvarHorarios, salvarServicos } from "@/lib/server/config";
 import { ErroDeNegocio, lerCorpo, responderErro } from "@/lib/server/http";
 
-/** PUT /api/admin/configuracoes — salva o catálogo ({ servicos }) ou o expediente ({ horarios }). */
+/** PUT /api/admin/configuracoes — salva o catálogo ({ servicos, categorias }) ou o expediente ({ horarios }). */
 export async function PUT(request: Request) {
   try {
-    const corpo = await lerCorpo<{ servicos: unknown; horarios: Partial<ConfiguracaoHorarios> }>(request);
+    const corpo = await lerCorpo<{ servicos: unknown; categorias: unknown; horarios: Partial<ConfiguracaoHorarios> }>(request);
 
     if (corpo.servicos !== undefined) {
       const servicos = lerCatalogoEnviado(corpo.servicos);
       if (!servicos) throw new ErroDeNegocio("Revise os serviços: cada um precisa de nome, preço e duração.");
-      const problema = problemaNoCatalogo(servicos);
+      const categorias = lerCategoriasEnviadas(corpo.categorias);
+      if (!categorias) throw new ErroDeNegocio("Revise as categorias: cada uma precisa de um nome.");
+      const problema = problemaNasCategorias(categorias, servicos) ?? problemaNoCatalogo(servicos);
       if (problema) throw new ErroDeNegocio(problema);
-      await salvarServicos(servicos);
-      return NextResponse.json({ servicos });
+      const ordenados = ordenarPorCategoria(servicos, categorias);
+      await salvarServicos(ordenados, categorias);
+      return NextResponse.json({ servicos: ordenados, categorias });
     }
 
     if (corpo.horarios !== undefined) {
