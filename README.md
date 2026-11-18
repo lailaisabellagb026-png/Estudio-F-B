@@ -16,7 +16,7 @@ Na Vercel: **Settings → Environment Variables**. Depois de cadastrar ou mudar,
 | `FIREBASE_SERVICE_ACCOUNT` | O **conteúdo inteiro** do arquivo `.json` da conta de serviço do Firebase (abra no Bloco de Notas, copie tudo e cole). |
 | `CALLMEBOT_APIKEY` | A chave que o CallMeBot manda no WhatsApp (passo a passo abaixo). |
 | `CRON_SECRET` | Um texto aleatório longo. O cron-job.org usa para chamar os lembretes. |
-| `CALLMEBOT_PHONE` | Opcional. Outro número para receber os avisos. Padrão: `5511996923040`. |
+| `CALLMEBOT_PHONE` | Opcional. Outro número para receber os avisos. Padrão: `5511976847027`. |
 | `SITE_URL` | Opcional. Só se usar domínio próprio, ex.: `https://estudiofb.com.br`. |
 
 Nunca coloque o arquivo `.json` da conta de serviço dentro do projeto nem no GitHub. O `.gitignore` já bloqueia `.env*` e arquivos `*firebase-adminsdk*.json`.
@@ -32,7 +32,7 @@ Sem `CALLMEBOT_APIKEY` o site funciona normalmente; só os avisos no WhatsApp fi
 
 ## Ativar os avisos no WhatsApp (CallMeBot)
 
-1. No celular com o WhatsApp **11 99692-3040**, salve o contato **+34 644 99 26 98** (número atual do CallMeBot; se não responder, confira em callmebot.com).
+1. No celular com o WhatsApp **11 97684-7027**, salve o contato **+34 644 99 26 98** (número atual do CallMeBot; se não responder, confira em callmebot.com).
 2. Envie para ele a mensagem: `I allow callmebot to send me messages`
 3. Você recebe a **apikey**. Cadastre em `CALLMEBOT_APIKEY` na Vercel e faça Redeploy.
 

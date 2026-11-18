@@ -1,14 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Bodoni_Moda } from "next/font/google";
+import { Archivo, Montserrat } from "next/font/google";
 import { ESTUDIO, urlDoSite } from "@/lib/estudio";
 import "./globals.css";
 
-// Bodoni para títulos (o mesmo desenho de alto contraste do "F&B" da logo)
-// e Archivo para o texto, com o eixo de largura para os rótulos condensados.
-const display = Bodoni_Moda({
+// Montserrat em negrito para títulos (traço firme, fácil de ler em qualquer
+// tela) e Archivo para o texto, com o eixo de largura para os rótulos condensados.
+const display = Montserrat({
   subsets: ["latin"],
   style: ["normal", "italic"],
-  axes: ["opsz"],
   variable: "--fonte-display",
 });
 

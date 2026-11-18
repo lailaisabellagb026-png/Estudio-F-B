@@ -150,9 +150,11 @@ function validarHorario(
     throw new ErroDeNegocio("O estúdio não abre nessa data. Escolha outro dia.", 409);
   }
 
-  const { horarios, fechamento } = horariosDoDia(data, configuracao);
+  const { abertura, fechamento } = horariosDoDia(data, configuracao);
   const inicio = horaParaMinutos(hora);
-  if (!horarios.includes(hora)) throw new ErroDeNegocio("Esse horário não faz parte do expediente.", 409);
+  // Aceita qualquer minuto do expediente: os horários colados ao fim de outro
+  // atendimento saem da grade de 30 minutos. O conflito é conferido à parte.
+  if (inicio < abertura || inicio >= fechamento) throw new ErroDeNegocio("Esse horário não faz parte do expediente.", 409);
   if (inicio + duracaoMin > fechamento) {
     throw new ErroDeNegocio("Os serviços terminariam depois do fechamento. Escolha um horário mais cedo.", 409);
   }

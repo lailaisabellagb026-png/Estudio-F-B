@@ -3,7 +3,7 @@
 export const ESTUDIO = {
   nome: "Estúdio de Beleza F&B",
   // WhatsApp do botão "Fale com o estúdio": DDI 55 + DDD + número.
-  whatsapp: "5511996923040",
+  whatsapp: "5511976847027",
   // Ex.: "Rua das Palmeiras, 120 — Vila Mariana, São Paulo/SP"
   endereco: "",
   // Link "compartilhar" do Google Maps.

@@ -9,7 +9,7 @@ const CALLMEBOT_URL = "https://api.callmebot.com/whatsapp.php";
 
 // Número que recebe os avisos (DDI + DDD + número). Pode ser trocado pela
 // variável CALLMEBOT_PHONE sem mexer no código.
-const NUMERO_PADRAO = "5511996923040";
+const NUMERO_PADRAO = "5511976847027";
 
 export async function avisarEstudio(mensagem: string): Promise<boolean> {
   const apikey = process.env.CALLMEBOT_APIKEY?.trim();

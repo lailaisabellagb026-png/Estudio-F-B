@@ -15,8 +15,7 @@
   --color-vermelho-escuro: #8f0b21; /* botão pressionado */
 }
 
-/* Bodoni para títulos (o desenho de alto contraste do "F&B" da logo) e
-   Archivo para o texto. As fontes vêm do next/font, no layout. */
+/* Montserrat em negrito para títulos e Archivo para o texto. As fontes vêm do next/font, no layout. */
 @theme inline {
   --font-display: var(--fonte-display), Georgia, serif;
   --font-sans: var(--fonte-sans), system-ui, sans-serif;
@@ -34,6 +33,8 @@
     background: var(--color-tinta);
     color: var(--color-giz);
     font-family: var(--font-sans);
+    /* Texto um pouco mais encorpado, para ler melhor no celular. */
+    font-weight: 500;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -140,6 +141,12 @@
       radial-gradient(circle var(--furo) at 50% 0, #0000 97%, #000) 50% 0 / var(--passo) 51% repeat-x,
       radial-gradient(circle var(--furo) at 50% 100%, #0000 97%, #000) 50% 100% / var(--passo) 51% repeat-x;
   }
+}
+
+/* Títulos sempre em negrito, mesmo onde a classe pede um peso mais leve. */
+.font-display {
+  font-weight: 700 !important;
+  letter-spacing: -0.01em;
 }
 
 /* Textura leve de parede de estúdio, a mesma do fundo da logo. */

@@ -40,8 +40,15 @@ export function horariosLivres({
   aPartirDeMin?: number;
 }) {
   if (duracaoMin <= 0) return [];
-  const { horarios, fechamento } = horariosDoDia(data, configuracao);
-  return horarios.filter((horario) => {
+  const { horarios, abertura, fechamento } = horariosDoDia(data, configuracao);
+  if (horarios.length === 0) return [];
+  // Além da grade de 30 em 30 minutos, oferece o horário exato em que cada
+  // atendimento termina, para o próximo começar sem intervalo vazio.
+  const fins = ocupados
+    .map((item) => item.fim)
+    .filter((hora) => horaParaMinutos(hora) >= abertura && horaParaMinutos(hora) < fechamento);
+  const candidatos = [...new Set([...horarios, ...fins])].sort();
+  return candidatos.filter((horario) => {
     const inicio = horaParaMinutos(horario);
     const fim = inicio + duracaoMin;
     if (inicio < aPartirDeMin || fim > fechamento) return false;

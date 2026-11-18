@@ -190,13 +190,14 @@ export function dataEstaAberta(dataISO: string, configuracao: ConfiguracaoHorari
 /** Horários de início possíveis num dia, sem olhar a agenda. */
 export function horariosDoDia(dataISO: string, configuracao: ConfiguracaoHorarios = HORARIOS_PADRAO) {
   const expediente = obterExpediente(dataISO, configuracao);
-  if (!expediente.ativo) return { horarios: [] as string[], fechamento: horaParaMinutos(expediente.fim) };
-  const horarios: string[] = [];
+  const abertura = horaParaMinutos(expediente.inicio);
   const fechamento = horaParaMinutos(expediente.fim);
-  for (let minuto = horaParaMinutos(expediente.inicio); minuto < fechamento; minuto += INTERVALO_HORARIOS_MIN) {
+  if (!expediente.ativo) return { horarios: [] as string[], abertura, fechamento };
+  const horarios: string[] = [];
+  for (let minuto = abertura; minuto < fechamento; minuto += INTERVALO_HORARIOS_MIN) {
     horarios.push(minutosParaHora(minuto));
   }
-  return { horarios, fechamento };
+  return { horarios, abertura, fechamento };
 }
 
 export function somarDias(dataISO: string, dias: number) {
